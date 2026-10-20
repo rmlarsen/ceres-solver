@@ -329,22 +329,20 @@ RefinedDenseCholesky::~RefinedDenseCholesky() = default;
 
 LinearSolverTerminationType RefinedDenseCholesky::Factorize(
     const int num_cols, double* lhs, std::string* message) {
-  lhs_ = lhs;
-  num_cols_ = num_cols;
+  lhs_ = Eigen::Map<const Eigen::MatrixXd>(lhs, num_cols, num_cols);
   return dense_cholesky_->Factorize(num_cols, lhs, message);
 }
 
 LinearSolverTerminationType RefinedDenseCholesky::Solve(const double* rhs,
                                                         double* solution,
                                                         std::string* message) {
-  CHECK(lhs_ != nullptr);
   auto termination_type = dense_cholesky_->Solve(rhs, solution, message);
   if (termination_type != LinearSolverTerminationType::SUCCESS) {
     return termination_type;
   }
 
   iterative_refiner_->Refine(
-      num_cols_, lhs_, rhs, dense_cholesky_.get(), solution);
+      lhs_.cols(), lhs_.data(), rhs, dense_cholesky_.get(), solution);
   return LinearSolverTerminationType::SUCCESS;
 }
 

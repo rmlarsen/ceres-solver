@@ -49,9 +49,11 @@
 
 namespace ceres::internal {
 
-using Param = ::testing::tuple<DenseLinearAlgebraLibraryType, bool>;
+using Param = ::testing::tuple<DenseLinearAlgebraLibraryType, bool, bool>;
 constexpr bool kMixedPrecision = true;
 constexpr bool kFullPrecision = false;
+constexpr bool kRefined = true;
+constexpr bool kUnrefined = false;
 
 namespace {
 
@@ -59,8 +61,17 @@ std::string ParamInfoToString(testing::TestParamInfo<Param> info) {
   Param param = info.param;
   std::stringstream ss;
   ss << DenseLinearAlgebraLibraryTypeToString(::testing::get<0>(param)) << "_"
-     << (::testing::get<1>(param) ? "MixedPrecision" : "FullPrecision");
+     << (::testing::get<1>(param) ? "MixedPrecision" : "FullPrecision")
+     << (::testing::get<2>(param) ? "_Refined" : "");
   return ss.str();
+}
+
+// Mixed precision solves only reach double precision accuracy with iterative
+// refinement, so they are not tested without it.
+auto TestedConfigurations(DenseLinearAlgebraLibraryType type) {
+  return ::testing::Values(Param(type, kMixedPrecision, kRefined),
+                           Param(type, kFullPrecision, kUnrefined),
+                           Param(type, kFullPrecision, kRefined));
 }
 }  // namespace
 
@@ -84,7 +95,7 @@ TEST_P(DenseCholeskyTest, FactorAndSolve) {
   options.dense_linear_algebra_library_type = ::testing::get<0>(GetParam());
   options.use_mixed_precision_solves = ::testing::get<1>(GetParam());
   const int kNumRefinementSteps = 4;
-  if (options.use_mixed_precision_solves) {
+  if (::testing::get<2>(GetParam())) {
     options.max_num_refinement_iterations = kNumRefinementSteps;
   }
   auto dense_cholesky = DenseCholesky::Create(options);
@@ -117,24 +128,18 @@ TEST_P(DenseCholeskyTest, FactorAndSolve) {
 
 INSTANTIATE_TEST_SUITE_P(EigenCholesky,
                          DenseCholeskyTest,
-                         ::testing::Combine(::testing::Values(EIGEN),
-                                            ::testing::Values(kMixedPrecision,
-                                                              kFullPrecision)),
+                         TestedConfigurations(EIGEN),
                          ParamInfoToString);
 #ifndef CERES_NO_LAPACK
 INSTANTIATE_TEST_SUITE_P(LapackCholesky,
                          DenseCholeskyTest,
-                         ::testing::Combine(::testing::Values(LAPACK),
-                                            ::testing::Values(kMixedPrecision,
-                                                              kFullPrecision)),
+                         TestedConfigurations(LAPACK),
                          ParamInfoToString);
 #endif
 #ifndef CERES_NO_CUDA
 INSTANTIATE_TEST_SUITE_P(CudaCholesky,
                          DenseCholeskyTest,
-                         ::testing::Combine(::testing::Values(CUDA),
-                                            ::testing::Values(kMixedPrecision,
-                                                              kFullPrecision)),
+                         TestedConfigurations(CUDA),
                          ParamInfoToString);
 #endif
 
@@ -174,7 +179,7 @@ TEST(RefinedDenseCholesky, Factorize) {
   EXPECT_CALL(*iterative_refiner, Refine(_, _, _, _, _)).Times(0);
   RefinedDenseCholesky refined_dense_cholesky(std::move(dense_cholesky),
                                               std::move(iterative_refiner));
-  double lhs;
+  double lhs = 1.0;
   std::string message;
   EXPECT_EQ(refined_dense_cholesky.Factorize(1, &lhs, &message),
             LinearSolverTerminationType::SUCCESS);
@@ -189,7 +194,7 @@ TEST(RefinedDenseCholesky, FactorAndSolveWithUnsuccessfulFactorization) {
   EXPECT_CALL(*iterative_refiner, Refine(_, _, _, _, _)).Times(0);
   RefinedDenseCholesky refined_dense_cholesky(std::move(dense_cholesky),
                                               std::move(iterative_refiner));
-  double lhs;
+  double lhs = 1.0;
   std::string message;
   double rhs;
   double solution;
@@ -209,7 +214,7 @@ TEST(RefinedDenseCholesky, FactorAndSolveWithSuccess) {
 
   RefinedDenseCholesky refined_dense_cholesky(std::move(dense_cholesky),
                                               std::move(iterative_refiner));
-  double lhs;
+  double lhs = 1.0;
   std::string message;
   double rhs;
   double solution;

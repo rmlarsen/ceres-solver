@@ -188,8 +188,9 @@ class CERES_NO_EXPORT RefinedDenseCholesky final : public DenseCholesky {
  private:
   std::unique_ptr<DenseCholesky> dense_cholesky_;
   std::unique_ptr<DenseIterativeRefiner> iterative_refiner_;
-  double* lhs_ = nullptr;
-  int num_cols_;
+  // A copy of the matrix passed to Factorize. The refiner computes residuals
+  // with it, and dense_cholesky_ may overwrite lhs with its factorization.
+  Eigen::MatrixXd lhs_;
 };
 
 #ifndef CERES_NO_CUDA
